@@ -37,5 +37,5 @@ public @interface FixMethodOrder {
     /**
      * Optionally specify <code>value</code> to have the methods executed in a particular order
      */
-    MethodSorters value() default MethodSorters.DEFAULT;
+    Class value() default MethodSorters.DefaultMethodSorter.class;
 }

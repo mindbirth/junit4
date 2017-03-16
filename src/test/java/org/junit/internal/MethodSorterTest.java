@@ -3,9 +3,11 @@ package org.junit.internal;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
 
+import java.lang.annotation.*;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 import org.junit.FixMethodOrder;
@@ -90,7 +92,7 @@ public class MethodSorterTest {
         assertEquals(expected, actual);
     }
 
-    @FixMethodOrder(MethodSorters.DEFAULT)
+    @FixMethodOrder(MethodSorters.DefaultMethodSorter.class)
     static class DummySortWithDefault {
         Object alpha(int i, double d, Thread t) {
             return null;
@@ -120,7 +122,7 @@ public class MethodSorterTest {
         assertEquals(expected, actual);
     }
 
-    @FixMethodOrder(MethodSorters.JVM)
+    @FixMethodOrder(MethodSorters.JvmMethodSorter.class)
     static class DummySortJvm {
         Object alpha(int i, double d, Thread t) {
             return null;
@@ -150,7 +152,7 @@ public class MethodSorterTest {
         assertArrayEquals(fromJvmWithSynthetics, sorted);
     }
 
-    @FixMethodOrder(MethodSorters.NAME_ASCENDING)
+    @FixMethodOrder(MethodSorters.NameAscendingMethodSorter.class)
     static class DummySortWithNameAsc {
         Object alpha(int i, double d, Thread t) {
             return null;
@@ -178,5 +180,86 @@ public class MethodSorterTest {
         List<String> expected = Arrays.asList(ALPHA, BETA, DELTA, EPSILON, GAMMA_VOID, GAMMA_BOOLEAN);
         List<String> actual = getDeclaredMethodNames(DummySortWithNameAsc.class);
         assertEquals(expected, actual);
+    }
+
+    @Documented
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD})
+    public @interface NumberOrdering {
+        int order();
+    }
+
+    static class OrderedComparator implements IMethodSorter {
+
+        public Comparator<Method> getComparator() {
+            return new Comparator<Method>() {
+                public int compare(Method m1, Method m2) {
+                    NumberOrdering orderAnnotation1 = m1.getAnnotation(NumberOrdering.class);
+                    NumberOrdering orderAnnotation2 = m2.getAnnotation(NumberOrdering.class);
+                    if (orderAnnotation2 == null) {
+                        return 1;
+                    }
+
+                    if (orderAnnotation1 == null) {
+                        return 1;
+                    }
+
+                    if (orderAnnotation1.order() < orderAnnotation2.order()) {
+                        return -1;
+                    } else if (orderAnnotation1.order() == orderAnnotation2.order()) {
+                        return 0;
+                    } else {
+                        return 1;
+                    }
+                }
+            };
+        }
+    }
+
+    @FixMethodOrder(OrderedComparator.class)
+    static abstract class ParentOrderedSortWithAsc {
+        @NumberOrdering(order = 0)
+        void alpha() {
+        }
+    }
+
+    @FixMethodOrder(OrderedComparator.class)
+    static class OrderedSortWithAsc extends ParentOrderedSortWithAsc {
+
+        @NumberOrdering(order = 10)
+        Object alpha(int i, double d, Thread t) {
+            return null;
+        }
+
+        @NumberOrdering(order = 5)
+        void beta(int[][] x) {
+        }
+
+        @NumberOrdering(order = 4)
+        int gamma() {
+            return 0;
+        }
+
+        @NumberOrdering(order = 3)
+        void gamma(boolean b) {
+        }
+
+        @NumberOrdering(order = 2)
+        void delta() {
+        }
+
+        @NumberOrdering(order = 1)
+        void epsilon() {
+        }
+    }
+
+    @Test
+    public void testCustomSorter() {
+        List<String> expected = Arrays.asList("void org.junit.internal.MethodSorterTest$ParentOrderedSortWithAsc.alpha()",
+                EPSILON, DELTA, GAMMA_BOOLEAN, GAMMA_VOID, BETA, ALPHA);
+        List<String> actual = getDeclaredMethodNames(OrderedSortWithAsc.class);
+        for (int i = 0; i < expected.size(); i++) {
+            assertEquals(expected.get(i), actual.get(i));
+        }
     }
 }

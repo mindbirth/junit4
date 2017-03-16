@@ -1,8 +1,7 @@
 package org.junit.internal;
 
 import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.Comparator;
+import java.util.*;
 
 import org.junit.FixMethodOrder;
 
@@ -18,6 +17,15 @@ public class MethodSorter {
                 return i1 < i2 ? -1 : 1;
             }
             return NAME_ASCENDING.compare(m1, m2);
+        }
+    };
+
+    /**
+     * JVM sort order
+     */
+    public static final Comparator<Method> JVM = new Comparator<Method>() {
+        public int compare(Method m1, Method m2) {
+            return 0;
         }
     };
 
@@ -51,7 +59,16 @@ public class MethodSorter {
     public static Method[] getDeclaredMethods(Class<?> clazz) {
         Comparator<Method> comparator = getSorter(clazz.getAnnotation(FixMethodOrder.class));
 
-        Method[] methods = clazz.getDeclaredMethods();
+        Class superClass = clazz.getSuperclass();
+        List<Method> existingMethods = new ArrayList<Method>();
+        while (superClass != null && superClass.getAnnotation(FixMethodOrder.class) != null) {
+            Collections.addAll(existingMethods, superClass.getDeclaredMethods());
+            superClass = superClass.getSuperclass();
+        }
+
+        Collections.addAll(existingMethods, clazz.getDeclaredMethods());
+
+        Method[] methods = existingMethods.toArray(new Method[existingMethods.size()]);
         if (comparator != null) {
             Arrays.sort(methods, comparator);
         }
@@ -67,6 +84,16 @@ public class MethodSorter {
             return DEFAULT;
         }
 
-        return fixMethodOrder.value().getComparator();
+        Class iMethodSorterClass = fixMethodOrder.value();
+        IMethodSorter sorter = null;
+        try {
+            sorter = (IMethodSorter) iMethodSorterClass.newInstance();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+
+        return sorter == null ? DEFAULT : sorter.getComparator();
     }
 }
